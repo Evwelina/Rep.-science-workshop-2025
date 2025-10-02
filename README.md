@@ -1,2 +1,2 @@
 # Rep.-science-workshop-2025
-For this exercise, I decided to save myself some sanity and use the code from Module 4: Multiple regression session with Luc. 
+Assignment 2 in BIO415, R course 2025, made by Evelina. To save myself the sanity, I decided to use a previous live coding session as my code of choice

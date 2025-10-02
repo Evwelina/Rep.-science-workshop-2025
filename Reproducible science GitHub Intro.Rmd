@@ -1,0 +1,192 @@
+---
+title: "Reproducible Science: Introduction to GitHub" 
+output: html_notebook
+author: Evelina Blomberg
+date: 02.10.2025
+---
+
+Its good practice to rinse the environment before running the code and/or editing.
+```{r}
+rm(list = ls())
+```
+
+Loads all neccessary packages and sets default ggplot theme. 
+```{r}
+library(car)
+library(GGally)
+library(performance)
+library(tidyverse)
+theme_set(theme_bw())
+```
+Reads dataset and shows column names. 
+```{r}
+df_Lawton <- read_csv("LawtondataforR.csv")
+
+names(df_Lawton)
+```
+Log-transforms the respones (counts +1)
+```{r}
+df_Lawton <- df_Lawton %>% 
+  mutate(log10_C_vagabundus = 
+           log10(C_vagabundus + 1))
+```
+
+Histogram of raw responses to check for outliers/errors. 
+```{r}
+df_Lawton %>% 
+  ggplot(aes(x = C_vagabundus)) +
+  geom_histogram(bins = 15)
+```
+
+Arc-sinus transforms percentage predictors; log-transforms species richness. 
+```{r}
+df_Lawton <- df_Lawton %>% 
+  mutate(tr_Percent_Hard_coral= asin(Percent_Hard_coral/100),
+         tr_Percent_Reef_substrate= asin(Percent_Reef_substrate/100),
+         tr_Percent_Soft_coral= asin(Percent_Soft_corals/100),
+         tr_Percent_Acropora = asin(Percent_Acropora/100),
+         tr_Percent_Porites = asin(Percent_Poritdae/100),
+         tr_Percent_Montipora = asin(Percent_Montipora/100),
+         tr_Percent_Pocilliporidae = asin(Percent_Pocilloporidae/100),
+         tr_Percent_Favidae = asin(Percent_Favidae/100),
+         tr_Percent_Other_hard_corals = asin(Percent_Other_hard_corals/100),
+         tr_Percent_Other = asin(Percent_Other/100),
+         log10_Number_species = log10(Number_spp))
+```
+
+Pair plot: correlation/distributions between predictors. 
+```{r}
+df_Lawton %>% 
+  select(tr_Percent_Hard_coral:log10_Number_species) %>% 
+  ggpairs()
+```
+
+Fits linear model with coral predictors + J'. 
+```{r}
+lm_C_vag <- lm(log10_C_vagabundus ~ 
+                 tr_Percent_Hard_coral +
+                 tr_Percent_Acropora +
+                 tr_Percent_Pocilliporidae +
+                 tr_Percent_Porites +
+                 J_prime,
+               data = df_Lawton)
+```
+
+Model diagnostics (normality, heterosced., multicoll., etc)
+```{r}
+check_model(lm_C_vag)
+```
+
+Checks VIF for collinearity
+```{r}
+check_model(lm_C_vag, check = "vif")
+```
+
+Removes one collinear predictor and refits 
+```{r}
+lm_C_vag_2 <- update(lm_C_vag, 
+                     ~. - tr_Percent_Hard_coral)
+
+```
+
+Checks VIF again after removal 
+```{r}
+check_model(lm_C_vag_2,
+            check = "vif")
+```
+
+Further model simplification
+```{r}
+lm_C_vag_3 <-  update(lm_C_vag_2,
+                      ~. - tr_Percent_Acropora)
+```
+
+Standardizes a variable manually and checks mean/sd.
+```{r}
+df_Lawton %>% 
+  mutate(c_tr_Percent_Pocilliporidae = 
+           (tr_Percent_Pocilliporidae - mean (tr_Percent_Pocilliporidae, na.rm = TRUE) )/ sd(tr_Percent_Pocilliporidae, na.rm = TRUE)) %>% 
+  select(tr_Percent_Pocilliporidae, c_tr_Percent_Pocilliporidae) %>% 
+  summarise(mean_tr_PP = mean(tr_Percent_Pocilliporidae),
+            mean_c_PP = mean(c_tr_Percent_Pocilliporidae),
+            sd_tr_PP = sd(tr_Percent_Pocilliporidae),
+            sd_c_tr_PP = sd(c_tr_Percent_Pocilliporidae))
+```
+
+Adds z-scored (centered/scaled) predictors to dataset
+```{r}
+df_Lawton <- df_Lawton %>% 
+  mutate(c_tr_Percent_Pocilliporidae = 
+           (tr_Percent_Pocilliporidae - mean (tr_Percent_Pocilliporidae, na.rm = TRUE) )/ sd(tr_Percent_Pocilliporidae, na.rm = TRUE),
+         c_J_prime = (J_prime - mean (J_prime, na.rm = TRUE) )/ sd(J_prime, na.rm = TRUE)) 
+```
+
+Linear model with standardized predictors. 
+```{r}
+std_lm_C_vag <- lm(log10_C_vagabundus ~ 
+                     c_tr_Percent_Pocilliporidae + 
+                     c_J_prime,
+               data = df_Lawton)
+```
+
+Prediction grid: vary Pocilliporidae, hold others at mean
+```{r}
+new_C_vag_data_var_Pocill <- crossing(
+  tr_Percent_Pocilliporidae = seq(min(df_Lawton$tr_Percent_Pocilliporidae),
+                                  max(df_Lawton$tr_Percent_Pocilliporidae),
+                                  length = 100),
+  tr_Percent_Porites = rep(mean(df_Lawton$tr_Percent_Porites),
+                           times = 100),
+  J_prime = rep(mean(df_Lawton$J_prime),
+                times = 100))
+```
+
+Generate predictions with confidence intervals 
+```{r}
+pred_C_vag_var_Pocill <- predict(lm_C_vag_3,
+                                 newdata = new_C_vag_data_var_Pocill,
+                                 int = "c")
+```
+
+Combines prediction grid with predicted values
+```{r}
+df_preds_C_vag_data_var_Pocill <- bind_cols(new_C_vag_data_var_Pocill,
+                                            as_tibble(pred_C_vag_var_Pocill))
+```
+
+Explicit predictions on response scale with C
+```{r}
+pred_C_vag_var_Pocill <- predict(lm_C_vag_3,
+                                 newdata = new_C_vag_data_var_Pocill,
+                                 interval = "confidence",
+                                 type = "response")
+```
+
+Final prediction dataframe
+```{r}
+df_preds_C_vag_data_var_Pocill <- bind_cols(
+  new_C_vag_data_var_Pocill,
+  as_tibble(pred_C_vag_var_Pocill)
+)
+```
+
+Plots predicted line + 95% confidence interval ribbon on original scale, with observed data points. 
+```{r}
+df_preds_C_vag_data_var_Pocill %>% 
+  ggplot(aes(x = tr_Percent_Pocilliporidae,y=10^fit-1)) +
+  geom_line() +
+  geom_ribbon(aes(ymin =10^lwr -1,
+                  ymax=10^upr-1),
+              alpha = 0.2,
+              fill = "skyblue") +
+  geom_jitter(data = df_Lawton,
+             aes(y =10^log10_C_vagabundus -1),
+             color = "black",
+             alpha = 0.2,
+             height = 0.2,
+             width =0) +
+  labs(x = "Pocilliporidae (%) (transformed)",
+       y = "C. vagabundus abundance",
+       title = "Predicted C. vagabundus vs. Pocilliporidae") 
+```
+
