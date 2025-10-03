@@ -20,7 +20,7 @@ theme_set(theme_bw())
 ```
 Reads dataset and shows column names. 
 ```{r}
-df_Lawton <- read_csv("LawtondataforR.csv")
+df_Lawton <- read_csv("../data/LawtonDataForR.csv")
 
 names(df_Lawton)
 ```
