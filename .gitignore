@@ -1,5 +1,7 @@
-.Rproj.user
+.Rproj.user/
 .Rhistory
 .RData
+.DS_Store
 .Ruserdata
+output/
 *.html
